@@ -1,2 +1,2 @@
 # testrepo
-A Test repository
+A Test repository.
