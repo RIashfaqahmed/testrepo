@@ -36,14 +36,9 @@ pipeline {
                         dir ("terraform/aws") {
                             pwd
                             if (terraformInit(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion) !=0) { error("Terraform init failed")}
-                            terraformOutput(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion)
+                            if (terraformOutput(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion) !=0) { error("Terraform output failed")}
                             
-                            sh '''
-                            sed -i 's/ = /=/' ~/.psdbsecrets.tfvars
-                            source ~/.psdbsecrets.tfvars
-                            sed -e 's/^/export /g' -e 's/ = /=/g' ~/.tfoutput.tfvars
-                            cat ¬/.tfoutput.tvars
-                            '''
+
                         }
                     }
                 }
@@ -60,6 +55,12 @@ pipeline {
                         git (branch: pssCodeBranch, url: pssCodeRepo)                            
                         
                         sh '''
+                            
+                            sed -i 's/ = /=/' ~/.psdbsecrets.tfvars
+                            source ~/.psdbsecrets.tfvars
+                            sed -i -e 's/^/export /g' -e 's/ = /=/g' ~/.tfoutput.tfvars
+                            source ~/.tfoutput.tfvars
+                            set
                             cd db-connector
                             ./gradlew update
                         '''
