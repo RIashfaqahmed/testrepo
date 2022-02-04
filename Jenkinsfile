@@ -20,78 +20,54 @@ pipeline {
     }
 
     stages {
-        stage('Stage1: PSS DB Migration') {
-            parallel {
-                
-                    stage('Stage1-1: Build for Windows') {
-                        environment {
-                            VAR2 = "variable2"
-                        }
-                        steps('Steps:Stage1-1, Step-1') {
-                            script {
-                                sh(label: "Label of runnig script block",script: 'echo "this is a script"')
-                            }
-                            echo "In Stage1-1 Building Windows App"     
-                        } //steps Stage1-1:Build
-                    } //stage1-1 Windows Build
-                    
-                    stage('Terraform Information Gathering') {
-                        steps {
-                            script {
-                                String tfCodeBranch  = "NIAD-2008-PS-DB-Migration-Script-Execution-During-Deployment"
-                                String tfCodeRepo    = "https://github.com/nhsconnect/integration-adaptors"
-                                String tfRegion      = "${TF_STATE_BUCKET_REGION}"
-                                List<String> tfParams = []
-                                Map<String,String> tfVariables = ["${tfComponent}_build_id": BUILD_TAG]
-                                String terraformBinPath = tfEnv()
-                                //String tfOutput=[]
-                                dir ("integration-adaptors") {
-                                    pwd
-                                    git (branch: tfCodeBranch, url: tfCodeRepo)
-                                    dir ("terraform/aws") {
-                                        pwd
-                                        //ls -al
-                                        if (terraformInit(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion) !=0) { error("Terraform init failed")}
-                                        //if (terraform('apply', TF_STATE_BUCKET, tfProject, tfSecondaryDeploymentEnv, tfComponent, tfRegion, tfVariables) !=0 ) { error("Terraform Apply failed")}
-                                        //touch ~/.tfoutput/tfoutput.sh
-                                        terraformOutput(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion)
-                                        
-                                        sh '''
-                                        sed -i 's/ = /=/' ~/.psdbsecrets.tfvars
-                                        source ~/.psdbsecrets.tfvars
-                                        sed -e 's/^/export /g' -e 's/ = /=/g' ~/.tfoutput.tfvars
-                                        cat ¬/.tfoutput.tvars
-                                        '''
-                                        //cat ~/.tfoutput/tfoutput.sh
-                                        //echo 'TF OUTPUT is '
-                                        //tfOutput
-                                        //sh( label: "Terraform Output", script: "${terraformBinPath} outputs", returnStatus: true)
-                                    }
-                                }
-                            }
+        stage('Terraform Information Gathering') {
+            steps {
+                script {
+                    String tfCodeBranch  = "NIAD-2008-PS-DB-Migration-Script-Execution-During-Deployment"
+                    String tfCodeRepo    = "https://github.com/nhsconnect/integration-adaptors"
+                    String tfRegion      = "${TF_STATE_BUCKET_REGION}"
+                    List<String> tfParams = []
+                    Map<String,String> tfVariables = ["${tfComponent}_build_id": BUILD_TAG]
+                    String terraformBinPath = tfEnv()
+                    //String tfOutput=[]
+                    dir ("integration-adaptors") {
+                        pwd
+                        git (branch: tfCodeBranch, url: tfCodeRepo)
+                        dir ("terraform/aws") {
+                            pwd
+                            if (terraformInit(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion) !=0) { error("Terraform init failed")}
+                            terraformOutput(TF_STATE_BUCKET, tfProject, tfPrimaryDeploymentEnv, tfComponent, tfRegion)
+                            
+                            sh '''
+                            sed -i 's/ = /=/' ~/.psdbsecrets.tfvars
+                            source ~/.psdbsecrets.tfvars
+                            sed -e 's/^/export /g' -e 's/ = /=/g' ~/.tfoutput.tfvars
+                            cat ¬/.tfoutput.tvars
+                            '''
                         }
                     }
-                    
-                    stage('PSS DB Migration Code') {
-                        steps {
-                            script {
-                                String pssCodeBranch  = "main"
-                                String pssCodeRepo    = "https://github.com/NHSDigital/nia-patient-switching-standard-adaptor"
-                                dir ("nia-patient-switching-standard-adaptor") {
-                                    pwd
-                                    //git (branch: pssCodeBranch, url: pssCodeRepo)                            
-                                    
-//                                    sh '''
-//                                        cd db-connector
-//                                        ./gradlew update
-//                                    '''
-                                }
-                            }
+                }
+            }
+        }
+        
+        stage('PSS DB Migration Code') {
+            steps {
+                script {
+                    String pssCodeBranch  = "main"
+                    String pssCodeRepo    = "https://github.com/NHSDigital/nia-patient-switching-standard-adaptor"
+                    dir ("nia-patient-switching-standard-adaptor") {
+                        pwd
+                        git (branch: pssCodeBranch, url: pssCodeRepo)                            
+                        
+                        sh '''
+                            cd db-connector
+                            ./gradlew update
+                        '''
+                    }
+                }
 
-                         } // steps-PSS DB Migration Code
-                    } // stage-PSS DB Migration Code
-            } //parallel
-        } //Stage1 PSS DB Migration
+             } // steps-PSS DB Migration Code
+        } // stage-PSS DB Migration Code
     } //stages
 } //pipeline
 
@@ -101,7 +77,6 @@ String tfEnv(String tfEnvRepo="https://github.com/tfutils/tfenv.git", String tfE
   sh(label: "Install TF",  script: "${tfEnvPath}/bin/tfenv install"     , returnStatus: true)
   return "${tfEnvPath}/bin/terraform"
 }
-
 
 
 // ---------------------------------------------- TERRAFORM FUNCTIONS START --------------------------------------------
@@ -157,19 +132,15 @@ int terraformOutput(String tfStateBucket, String project, String environment, St
     psDbSecretsExtracted.put("export GPC_FACADE_USER_DB_PASSWORD",psDbSecrets.get('postgres_psdb_gpc_facade_user_password'))
 
     writeVariablesToFile("~/.psdbsecrets.tfvars",psDbSecretsExtracted)
-    //println(psDbSecretsExtracted)
-    //sh (script: "cat ~/.psdbsecrets.tfvars")
-  
-  
+
   
   String terraformBinPath = tfEnv()
   println("Terraform outputs for Environment: ${environment} Component: ${component} in region: ${region} using bucket: ${tfStateBucket}")
   String command = "${terraformBinPath} output > ~/.tfoutput.tfvars"
   dir("components/${component}") {
-    //return
     return( sh( label: "Terraform Output", script: command, returnStatus: true))
   } // dir
-} // int TerraformInit
+} // int TerraformOutput
 
 // ---------------------------------------------- TERRAFORM FUNCTIONS END --------------------------------------------
 
